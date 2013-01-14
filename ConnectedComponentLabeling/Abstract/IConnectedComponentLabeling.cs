@@ -1,10 +1,11 @@
-﻿using System.Collections.Generic;
+﻿using DotSpatial.Data;
+using System.Collections.Generic;
 using System.Drawing;
 
 namespace ConnectedComponentLabeling
 {
     public interface IConnectedComponentLabeling
     {
-        IDictionary<int, Bitmap> Process(Bitmap input);
+        Dictionary<int, HashSet<Point>> Process(IRaster input);
     }
 }

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.ComponentModel.Composition;
 using System.Linq;
+using DotSpatial.Data;
 
 namespace ConnectedComponentLabeling
 {
@@ -9,61 +10,74 @@ namespace ConnectedComponentLabeling
     [PartCreationPolicy(CreationPolicy.NonShared)]
     public class CCL : IConnectedComponentLabeling
     {
+        public CCL()
+        {
+        }
+
+        public CCL(int startX, int startY)
+        {
+            _startX = startX;
+            _startY = startY;
+        }
+
         #region Member Variables
 
         private int[,] _board;
-        private Bitmap _input;
+        private IRaster _input;
+        private int _startX;
+        private int _startY;
 
         #endregion
 
         #region IConnectedComponentLabeling
 
-        public IDictionary<int, Bitmap> Process(Bitmap input)
+        public Dictionary<int, HashSet<Point>> Process(IRaster input)
         {
             _input = input;
-            int width = input.Width;
-            int height = input.Height;
+            
+            int width = input.NumColumns;
+            int height = input.NumRows;
             _board = new int[width, height];
 
-            Dictionary<int, List<Pixel>> patterns = Find(width, height);
-            var images = new Dictionary<int, Bitmap>();
-
-            foreach (KeyValuePair<int, List<Pixel>> pattern in patterns)
-            {
-                Bitmap output = CreateBitmap(pattern.Value);
-                images.Add(pattern.Key, output);
-            }
-
-            return images;
+            Dictionary<int, HashSet<Point>> patterns = Find(width, height);
+            return patterns;
         }
 
         #endregion
 
         #region Protected Methods
 
-        protected virtual bool CheckIsForeGround(Pixel currentPixel)
+        protected virtual bool CheckIsForeGround(Point currentPoint)
         {
-            return currentPixel.color.A == 255 && currentPixel.color.R == 0 && currentPixel.color.G == 0 && currentPixel.color.B == 0;
+            try
+            {
+                return _input.Value[currentPoint.Y, currentPoint.X].ToString() != "-32302";
+            }
+            catch(System.Exception e)
+            {
+                System.Diagnostics.Debug.WriteLine(e.Message);
+            }
+            return true;
         }
 
         #endregion
 
         #region Private Methods
 
-        private Dictionary<int, List<Pixel>> Find(int width, int height)
+        private Dictionary<int, HashSet<Point>> Find(int width, int height)
         {
             int labelCount = 1;
             var allLabels = new Dictionary<int, Label>();
 
-            for (int i = 0; i < height; i++)
+            for (int y = 0; y < height; y++)
             {
-                for (int j = 0; j < width; j++)
+                for (int x = 0; x < width; x++)
                 {
-                    Pixel currentPixel = new Pixel(new Point(j, i), _input.GetPixel(j, i));
+                    Point currentPoint = new Point(x, y);
 
-                    if (CheckIsForeGround(currentPixel))
+                    if (CheckIsForeGround(currentPoint))
                     {
-                        HashSet<int> neighboringLabels = GetNeighboringLabels(currentPixel, width, height);
+                        HashSet<int> neighboringLabels = GetNeighboringLabels(currentPoint, width, height);
                         int currentLabel;
 
                         if (neighboringLabels.Count == 0)
@@ -88,22 +102,22 @@ namespace ConnectedComponentLabeling
                             }
                         }
 
-                        _board[j, i] = currentLabel;
+                        _board[x, y] = currentLabel;
                     }
                 }
             }
 
 
-            Dictionary<int, List<Pixel>> patterns = AggregatePatterns(allLabels, width, height);
+            Dictionary<int, HashSet<Point>> patterns = AggregatePatterns(allLabels, width, height);
 
             return patterns;
         }
 
-        private HashSet<int> GetNeighboringLabels(Pixel pix, int width, int height)
+        private HashSet<int> GetNeighboringLabels(Point pix, int width, int height)
         {
             var neighboringLabels = new HashSet<int>();
-            int x = pix.Position.Y;
-            int y = pix.Position.X;
+            int x = pix.Y;
+            int y = pix.X;
 
             if (x > 0)//North
             {
@@ -149,51 +163,37 @@ namespace ConnectedComponentLabeling
             }
         }
 
-        private Bitmap CreateBitmap(List<Pixel> pixels)
-        {
-            int widthShift, heightShift;
-            int w = GetDimension(pixels, out widthShift, true);
-            int h = GetDimension(pixels, out heightShift, false);
-            var output = new Bitmap(w, h);
 
-            foreach (Pixel pix in pixels)
-            {
-                output.SetPixel(pix.Position.X - widthShift, pix.Position.Y - heightShift, pix.color);
-            }
+        //private int GetDimension(HashSet<Point> shape, out int dimensionShift, bool isWidth)
+        //{
+        //    int result = dimensionShift = CheckDimensionType(shape[0], isWidth);
 
-            return output;
-        }
+        //    for (int i = 1; i < shape.Count; i++)
+        //    {
+        //        int dimension = CheckDimensionType(shape[i], isWidth);
 
-        private int GetDimension(List<Pixel> shape, out int dimensionShift, bool isWidth)
-        {
-            int result = dimensionShift = CheckDimensionType(shape[0], isWidth);
+        //        if (result < dimension)
+        //        {
+        //            result = dimension;
+        //        }
 
-            for (int i = 1; i < shape.Count; i++)
-            {
-                int dimension = CheckDimensionType(shape[i], isWidth);
+        //        if (dimensionShift > dimension)
+        //        {
+        //            dimensionShift = dimension;
+        //        }
+        //    }
 
-                if (result < dimension)
-                {
-                    result = dimension;
-                }
-
-                if (dimensionShift > dimension)
-                {
-                    dimensionShift = dimension;
-                }
-            }
-
-            return (result + 1) - dimensionShift;
-        }
+        //    return (result + 1) - dimensionShift;
+        //}
 
         private int CheckDimensionType(Pixel shape, bool isWidth)
         {
             return isWidth ? shape.Position.X : shape.Position.Y;
         }
 
-        private Dictionary<int, List<Pixel>> AggregatePatterns(Dictionary<int, Label> allLabels, int width, int height)
+        private Dictionary<int, HashSet<Point>> AggregatePatterns(Dictionary<int, Label> allLabels, int width, int height)
         {
-            var patterns = new Dictionary<int, List<Pixel>>();
+            var patterns = new Dictionary<int, HashSet<Point>>();
 
             for (int i = 0; i < height; i++)
             {
@@ -207,10 +207,10 @@ namespace ConnectedComponentLabeling
 
                         if (!patterns.ContainsKey(patternNumber))
                         {
-                            patterns.Add(patternNumber, new List<Pixel>());
+                            patterns.Add(patternNumber, new HashSet<Point>());
                         }
 
-                        patterns[patternNumber].Add(new Pixel(new Point(j, i), Color.Black));
+                        patterns[patternNumber].Add(new Point(j, i));
                     }
                 }
             }
