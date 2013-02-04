@@ -19,9 +19,9 @@ namespace ConnectedComponentLabeling
 
         private int[,] _board;
         private IRaster _input;
-        private int _startX;
-        private int _startY;
-        private int _noDataValue;
+        private int _width;
+        private int _height;
+
 
         #endregion
 
@@ -31,11 +31,11 @@ namespace ConnectedComponentLabeling
         {
             _input = input;
             
-            int width = input.NumColumns;
-            int height = input.NumRows;
-            _board = new int[width, height];
+            _width = input.NumColumns;
+            _height = input.NumRows;
+            _board = new int[_width, _height];
 
-            Dictionary<int, HashSet<Point>> patterns = Find(width, height);
+            Dictionary<int, HashSet<Point>> patterns = Find(_width, _height);
             return patterns;
         }
 
@@ -72,91 +72,70 @@ namespace ConnectedComponentLabeling
             int labelCount = 1;
             var allLabels = new Dictionary<int, Label>();
 
-            for (int y = 0; y < height; y++)
+            for (int i = 0; i < _height; i++)
             {
-                for (int x = 0; x < width; x++)
+                for (int j = 0; j < _width; j++)
                 {
-                    Point currentPoint = new Point(x, y);
+                    Point currentPoint = new Point(j, i);
 
-                    if (CheckIsForeGround(currentPoint))
+                    if (!CheckIsForeGround(currentPoint))
                     {
-                        HashSet<int> neighboringLabels = GetNeighboringLabels(currentPoint, width, height);
-                        int currentLabel;
+                        continue;
+                    }
 
-                        if (neighboringLabels.Count == 0)
-                        {
-                            currentLabel = labelCount;
-                            allLabels.Add(currentLabel, new Label(currentLabel));
-                            labelCount++;
-                        }
-                        else
-                        {
-                            currentLabel = neighboringLabels.Min();
-                            var root = allLabels[currentLabel].GetRoot();
+					HashSet<int> neighboringLabels = GetNeighboringLabels(currentPoint);		
+                    int currentLabel;
 
-                            foreach (var item in neighboringLabels)
+                    if (!neighboringLabels.Any())
+                    {
+                        currentLabel = labelCount;
+                        allLabels.Add(currentLabel, new Label(currentLabel));
+                        labelCount++;
+                    }
+                    else
+                    {
+                        currentLabel = neighboringLabels.Min(n => allLabels[n].GetRoot().Name);
+                        var root = allLabels[currentLabel].GetRoot();
+
+                        foreach (var item in neighboringLabels)
+                        {
+                            var root2 = allLabels[item].GetRoot();
+
+                            if (root.Name != root2.Name)
                             {
-                                var root2 = allLabels[item].GetRoot();
-
-                                if (root.Name != root2.Name)
-                                {
-                                    allLabels[item].Join(allLabels[currentLabel]);
-                                }
+                                allLabels[item].Join(allLabels[currentLabel]);
                             }
                         }
-
-                        _board[x, y] = currentLabel;
                     }
+
+                    _board[j, i] = currentLabel;
                 }
             }
 
 
-            Dictionary<int, HashSet<Point>> patterns = AggregatePatterns(allLabels, width, height);
+            Dictionary<int, HashSet<Point>> patterns = AggregatePatterns(allLabels);
 
             return patterns;
         }
 
-        private HashSet<int> GetNeighboringLabels(Point pix, int width, int height)
+        private HashSet<int> GetNeighboringLabels(Point pix)
         {
             var neighboringLabels = new HashSet<int>();
-            int x = pix.Y;
-            int y = pix.X;
 
-            if (x > 0)//North
+            for (int i = pix.Y - 1; i <= pix.Y + 2 && i < _height - 1; i++)
             {
-                CheckCorner(neighboringLabels, x - 1, y);
-
-                if (y > 0)//North West
+                for (int j = pix.X - 1; j <= pix.X + 2 && j < _width - 1; j++)
                 {
-                    CheckCorner(neighboringLabels, x - 1, y - 1);
-                }
-
-                if (y < width - 1)//North East
-                {
-                    CheckCorner(neighboringLabels, x - 1, y + 1);
-                }
-            }
-            if (y > 0)//West
-            {
-                CheckCorner(neighboringLabels, x, y - 1);
-
-                if (x < height - 1)//South West
-                {
-                    CheckCorner(neighboringLabels, x + 1, y - 1);
-                }
-            }
-            if (y < width - 1)//East
-            {
-                CheckCorner(neighboringLabels, x, y + 1);
-
-                if (x < height - 1)//South East
-                {
-                    CheckCorner(neighboringLabels, x + 1, y + 1);
+                    if (i > -1 && j > -1 && _board[j, i] != 0)
+                    {
+                        neighboringLabels.Add(_board[j, i]);
+                    }
                 }
             }
 
             return neighboringLabels;
         }
+
 
         private void CheckCorner(HashSet<int> neighboringLabels, int i, int j)
         {
@@ -189,18 +168,14 @@ namespace ConnectedComponentLabeling
         //    return (result + 1) - dimensionShift;
         //}
 
-        private int CheckDimensionType(Pixel shape, bool isWidth)
-        {
-            return isWidth ? shape.Position.X : shape.Position.Y;
-        }
 
-        private Dictionary<int, HashSet<Point>> AggregatePatterns(Dictionary<int, Label> allLabels, int width, int height)
+        private Dictionary<int, HashSet<Point>> AggregatePatterns(Dictionary<int, Label> allLabels)
         {
             var patterns = new Dictionary<int, HashSet<Point>>();
 
-            for (int i = 0; i < height; i++)
+            for (int i = 0; i < _height; i++)
             {
-                for (int j = 0; j < width; j++)
+                for (int j = 0; j < _width; j++)
                 {
                     int patternNumber = _board[j, i];
 
@@ -210,7 +185,7 @@ namespace ConnectedComponentLabeling
 
                         if (!patterns.ContainsKey(patternNumber))
                         {
-                            patterns.Add(patternNumber, new HashSet<Point>());
+                            patterns[patternNumber] = new HashSet<Point>();
                         }
 
                         patterns[patternNumber].Add(new Point(j, i));
