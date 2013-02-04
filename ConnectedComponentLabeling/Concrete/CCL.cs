@@ -10,14 +10,9 @@ namespace ConnectedComponentLabeling
     [PartCreationPolicy(CreationPolicy.NonShared)]
     public class CCL : IConnectedComponentLabeling
     {
+
         public CCL()
         {
-        }
-
-        public CCL(int startX, int startY)
-        {
-            _startX = startX;
-            _startY = startY;
         }
 
         #region Member Variables
@@ -26,6 +21,7 @@ namespace ConnectedComponentLabeling
         private IRaster _input;
         private int _startX;
         private int _startY;
+        private int _noDataValue;
 
         #endregion
 
@@ -51,13 +47,20 @@ namespace ConnectedComponentLabeling
         {
             try
             {
-                return _input.Value[currentPoint.Y, currentPoint.X].ToString() != "-32302";
+                return _input.Value[currentPoint.Y, currentPoint.X].ToString() != _input.NoDataValue.ToString();
             }
             catch(System.Exception e)
             {
                 System.Diagnostics.Debug.WriteLine(e.Message);
             }
             return true;
+        }
+
+
+        public static int CountConnectedComponents(IRaster raster)
+        // Count the number of connected components in a raster.
+        {
+            return (new CCL()).Process(raster).Count;
         }
 
         #endregion
